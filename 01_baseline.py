@@ -93,4 +93,62 @@ print(y.shape) #should be (min_rows*2,) because it's just a single column of lab
 # === Train-Test Split ===
 from sklearn.model_selection import train_test_split
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y) #this one splits the data into training and testing sets. test_size=0.2 means 20% of the data will be used for testing and 80% for training. random_state=42 is for reproducibility. Stratify = y means we want to maintain the same class distribution in both training and testing sets.
+#this one splits the data into training and testing sets. test_size=0.2 means 20% of the data will be used for testing and 80% for training. random_state=42 is for reproducibility. Stratify = y means we want to maintain the same class distribution in both training and testing sets.
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y) 
+
+
+# === TRAINING A BASELINE MODEL USING DECISION TREE CLASSIFIER ===
+from sklearn.tree import DecisionTreeClassifier
+
+print("\nInitializing the Decision Tree Model...")
+dt_model = DecisionTreeClassifier(random_state=42) #random_state for reproducibility
+
+print("Training the model on the 80% practice data. Please wait...")
+#fit function does the actual training
+dt_model.fit(X_train, y_train)
+
+print("Model training is done! The model has learned the patterns. ")
+
+# === Testing the trained model ===
+print("\nTesting the model on the unseen 20% data...")
+
+#The model takes the exam (20% of the unseen data) l y_pred_dt is the model's predictions for the test set. It will be an array of 0s and 1s, where 0 means the model thinks it's benign and 1 means it thinks it's malicious.
+y_pred_dt = dt_model.predict(X_test) 
+
+print("Predictions complete!")
+
+#Let's peek at the first 10 predictions vs the true answers
+print("\n---Let's grade the first 10 rows ---")
+print(f"Model's Guesses: {y_pred_dt[:10]}")
+print(f"True Answers: {y_test[:10].values}")
+
+# === Evaluating the model's performance ===
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+
+print("\n=== GRADING THE MODEL ===")
+print("Accuracy Score:", accuracy_score(y_test, y_pred_dt)) #this one calculates the overall accuracy of the model by comparing the predicted labels (y_pred_dt) with the true labels (y_test). It returns a value between 0 and 1, where 1 means perfect accuracy.
+
+print("\nConfusion Matrix:")
+print(confusion_matrix(y_test, y_pred_dt)) #this one creates a confusion matrix which is a table that shows the counts of true positives, true negatives, false positives, and false negatives. It helps us understand how well the model is performing in terms of correctly identifying benign and malicious samples.
+
+print("\nClassification Report:")
+print(classification_report(y_test,y_pred_dt)) #this one generates a detailed classification report that includes precision, recall, f1-score, and support for each class (benign and malicious). It gives us a more comprehensive view of the model's performance beyond just accuracy.
+
+
+
+# Now we are trying to know which features were used most by the Decision Tree to make its decisions. This can help us understand which aspects of the network traffic are most important for distinguishing between benign and malicious behavior.
+print("\n=== TOP 5 MOST IMPORTANT FEATURES: ===")
+
+#Extract the importnace scores from the trained model
+importances = dt_model.feature_importances_
+
+#Create  a clean table matching feature names to their scores
+feature_names = X.columns
+importance_df = pd.DataFrame({
+    "Feature": feature_names,
+    "Importance": importances
+})
+
+#Sort the features by importance in descending order
+importance_df = importance_df.sort_values(by = "Importance", ascending=False)
+print(importance_df.head(5)) 
