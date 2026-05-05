@@ -13,6 +13,7 @@
 
 import pandas as pd
 
+# Storing the datasets in 2D tables called DataFrames using pandas lib
 benign = pd.read_csv(r"C:\Users\Mulkum\OneDrive\Рабочий стол\Uni Related\research\Dataset\Danmini_Doorbell\benign_traffic.csv")
 malicious = pd.read_csv(r"C:\Users\Mulkum\OneDrive\Рабочий стол\Uni Related\research\Dataset\Danmini_Doorbell\mirai_attacks\udp.csv")
 
@@ -52,18 +53,25 @@ print("\n\n === ALL COLUMNS ARE SAME OR NOT ? T/F ===")
 print(benign.columns.equals(malicious.columns))
 
 # === Lets Label the datasets: 0 for benign and 1 for malicious (adding one last column)===
+
+# 1. Clean up the memory (de-fragment); until this point the dataframe is too fragmented across the memory and this can cause performance issues. By copying the dataframes, we create new contiguous blocks of memory for each dataset, which can improve performance when we later add new columns or perform operations on the data.
+benign = benign.copy()
+malicious = malicious.copy()
+
+# 2. Add the labels
 benign["label"] = 0 # adds label column to benign dataset and assigns 0 to all rows
 malicious["label"] = 1 # adds label column to malicious dataset and assigns 1 to all rows
 
-# === Take 50k rows from each dataset to create a balanced sample for training ===
+# === Take max rows from each dataset to create a balanced sample for training (max rows must be the same) ===
 min_rows = min(len(benign),len(malicious)) #this one checks which dataset has fewer rows and takes that number as the sample size to ensure balance
 
+#now we have small version of each dataset with the same number of rows.
 benign_sample = benign.sample(n=min_rows, random_state=42) #random_state is for reproducibility
 malicious_sample = malicious.sample(n=min_rows, random_state=42)
 
 # === Merge these two sample datasets ===
-# df is final dataset that we will use for training and testing our model. It contains 100k rows (50k benign + 50k malicious) and all the original columns plus the new "label" column.
-df = pd.concat([benign_sample, malicious_sample], ignore_index=True) #ignore_index resets the row numbers after concatenation
+# df is final dataset that we will use for training and testing our model. It contains ~100k rows (~50k benign + ~50k malicious) and all the original columns plus the new "label" column.
+df = pd.concat([benign_sample, malicious_sample], ignore_index=True) #ignore_index resets the row numbers after concatenation; without it, the row numbers would be duplicated from both datasets (0 to min_rows-1 for benign and 0 to min_rows-1 for malicious), which can cause confusion. By setting ignore_index=True, we get a new set of row numbers from 0 to (min_rows*2)-1 for the merged dataset.
 
 #Inspect the results
 print("=== MERGED DATASET ===")
@@ -74,7 +82,7 @@ print("\n== Shape: ==") #this one tells the number of rows and columns in datase
 print(df.shape) #should be (min_rows*2, 116) 
 
 print("\nClass Balance:")
-print(df["label"].value_counts()) #this one counts how many 0s and 1s we have in the label column to check if our dataset is balanced or not. Should be 50000 each.
+print(df["label"].value_counts()) #this one counts how many 0s and 1s we have in the label column to check if our dataset is balanced or not. Should be ~50000 each.
 
 # === Separate the features and labels: X and y ===
 X = df.drop("label", axis=1) #this one drops the "label" column from df and axis=1 means we are dropping a column (not a row). The resulting X will contain all the original features but not the label.
@@ -88,7 +96,7 @@ print(X.shape) #should be (min_rows*2, 115) because we dropped the label column
 
 print("\n=== LABELS (y) ===")
 print(y.head())
-print(y.shape) #should be (min_rows*2,) because it's just a single column of labels
+print(y.shape) #should be (min_rows*2,) because it's just a single column of labels (since it is a Series - one dimensional tabl- not a DataFrame and thus 1 column is not counted in shape)
 
 # === Train-Test Split ===
 from sklearn.model_selection import train_test_split
@@ -96,8 +104,9 @@ from sklearn.model_selection import train_test_split
 #this one splits the data into training and testing sets. test_size=0.2 means 20% of the data will be used for testing and 80% for training. random_state=42 is for reproducibility. Stratify = y means we want to maintain the same class distribution in both training and testing sets.
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y) 
 
-
+# ================================================================
 # === TRAINING A BASELINE MODEL USING DECISION TREE CLASSIFIER ===
+# ================================================================
 from sklearn.tree import DecisionTreeClassifier
 
 print("\nInitializing the Decision Tree Model...")
@@ -139,7 +148,7 @@ print(classification_report(y_test,y_pred_dt)) #this one generates a detailed cl
 # Now we are trying to know which features were used most by the Decision Tree to make its decisions. This can help us understand which aspects of the network traffic are most important for distinguishing between benign and malicious behavior.
 print("\n=== TOP 5 MOST IMPORTANT FEATURES: ===")
 
-#Extract the importnace scores from the trained model
+#Extract the importance scores from the trained model
 importances = dt_model.feature_importances_
 
 #Create  a clean table matching feature names to their scores
@@ -152,3 +161,46 @@ importance_df = pd.DataFrame({
 #Sort the features by importance in descending order
 importance_df = importance_df.sort_values(by = "Importance", ascending=False)
 print(importance_df.head(5)) 
+
+
+# ================================================================
+# ===== TRAINING A BASELINE MODEL USING Logistic Regression  =====
+# ================================================================
+
+#Scale Features for Logistic Regression before training the model
+from sklearn.preprocessing import StandardScaler
+
+print("\nScaling features for Logistic Regression...")
+
+scaler = StandardScaler() #StandardScaler standardizes the features by removing the mean and scaling to unit variance. This is important for algorithms like Logistic Regression that are sensitive to the scale of the features. By scaling, we ensure that all features contribute equally to the model's learning process and prevent features with larger ranges from dominating the model's behavior.
+
+#Fit the scaler on the training data, then transform both training and testing data 
+X_train_scaled = scaler.fit_transform(X_train) #fit_transform learns the scaling parameters from X_train and applies the scaling to X_train
+X_test_scaled = scaler.transform(X_test) #transform applies the same scaling parameters learned from X_train to X_test (without fitting again)
+
+print("Feature scaling completed!")
+
+# === Training a baseline model using logistic regression ===
+from sklearn.linear_model import LogisticRegression
+
+print("\nInitializing the Logistic Regression Model...")
+
+log_reg_model = LogisticRegression(max_iter = 1000, random_state =42) #max_iter is the maximum number of iterations for the solver to converge. Sometimes logistic regression can take a long time to find the optimal parameters, especially with large datasets, so we set max_iter to 1000 to give it enough time. random_state for reproducibility.
+
+print("Training the Logistic Regression model on the scaled 80% practice data. Please wait...")
+
+log_reg_model.fit(X_train_scaled, y_train) #fit function does the actual training
+
+print("Logistic Regression training is done!")
+
+# === Testing the trained logistic regression model ===
+
+print("\nTesting the Logistic Regression on the unseen 20% test data...")
+
+y_pred_lr = log_reg_model.predict(X_test_scaled) #it predicts the labels for the test set using the trained logistic regression model. y_pred_lr will be an array of 0s and 1s, where 0 means the model thinks it's benign and 1 means it thinks it's malicious.
+
+print("Logistic Regression predictions complete!")
+
+print("\nFirst 10 Logistic Regression predictions vs true answers:")
+print(f"Models's Guesses: {y_pred_lr[:10]}")
+print(f"True Answers: {y_test[:10].values}")
